@@ -59,7 +59,8 @@ class ExtractedRequirement(BaseModel):
         "(мощность / quvvat / power -> power)"
     )
     operator: Literal["gte", "lte", "eq", "range_within", "range_covers", "exists", "text"] = Field(
-        description="range_within: value must lie inside the range; range_covers: the offered "
+        description="gte also for a plain capacity/performance number (offering more complies); "
+        "range_within: value must lie inside the range; range_covers: the offered "
         "range must cover the required one (operating temperature); exists: a document or "
         "property must be present; text: anything that is not a numeric comparison"
     )

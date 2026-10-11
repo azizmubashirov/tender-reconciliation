@@ -39,6 +39,13 @@ facilities, service centre, bid and performance security, bid form requirements 
 - req_type: mandatory when non-compliance leads to rejection ("должен", "обязательно", \
 "не допускается", "shart", "kerak", "must"); rated when it gives evaluation points; \
 desired otherwise ("желательно", "maqsadga muvofiq", "preferably").
+- Operator choice: a plain number for a capacity or performance characteristic (memory, \
+storage, battery life, speed, resolution, number of ports, warranty) is a MINIMUM, so use gte: \
+a bigger offered value still complies. Use eq only for exact values written as exact \
+("ровно", "точно", "aynan", "exactly", a tolerance such as ±5%), for physical sizes such as \
+screen diagonal, and for names, types and models. lte is for maximums ("не более", \
+"kamida emas"), including delivery terms and weight.
+- "или аналог" / "or equivalent" / "yoki ekvivalent": set equivalent_allowed to true.
 - quote is copied verbatim from the document in its original language.
 - Report contradictions inside the documentation (warranty 24 months in the specification \
 but 12 in the contract), ambiguities and requirements that may restrict competition as issues.
