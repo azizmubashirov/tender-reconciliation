@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 16mm 14mm; @bottom-right { content: counter(page) " / " counter(pages); font-size: 8pt; color: #888; } }
+  body { font-family: "DejaVu Sans", sans-serif; font-size: 9pt; color: #1f2328; }
+  h1 { font-size: 16pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 7mm 0 2mm; border-bottom: 1px solid #ddd; padding-bottom: 1mm; }
+  .muted { color: #666; }
+  .cards { display: flex; gap: 3mm; margin-top: 4mm; }
+  .card { flex: 1; border: 1px solid #ddd; border-radius: 2mm; padding: 2.5mm 3mm; }
+  .card b { display: block; font-size: 15pt; margin-top: 1mm; }
+  .verdict-rejection_risk { border-color: #dc2626; background: #fdecec; }
+  .verdict-needs_work { border-color: #eab308; background: #fdf8e6; }
+  .verdict-ready { border-color: #16a34a; background: #eaf7ee; }
+  table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+  th, td { border: 1px solid #e3e3e3; padding: 1.5mm 2mm; vertical-align: top; text-align: left; }
+  th { background: #f5f5f5; font-size: 8pt; }
+  .status { color: #fff; font-weight: bold; border-radius: 1mm; padding: 0.5mm 1.5mm; white-space: nowrap; font-size: 8pt; }
+  .summary { white-space: pre-wrap; line-height: 1.45; }
+  .code { white-space: nowrap; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>{{ t.title }}</h1>
+  <div class="muted">{{ project.title }}{% if project.lot_number %} · {{ project.lot_number }}{% endif %}{% if project.customer_name %} · {{ project.customer_name }}{% endif %}{% if project.submission_deadline %} · {{ t.deadline }} {{ project.submission_deadline.strftime('%d.%m.%Y') }}{% endif %}</div>
+
+  <div class="cards">
+    <div class="card">{{ t.total }}<b>{{ score.total if score.total is not none else '—' }}%</b>
+      {% if score.total_min != score.total_max %}<span class="muted">{{ score.total_min }}–{{ score.total_max }}%</span>{% endif %}</div>
+    <div class="card">{{ t.product }} / {{ t.participant }}<b>{{ score.product if score.product is not none else '—' }}% / {{ score.participant if score.participant is not none else '—' }}%</b></div>
+    <div class="card">{{ t.mandatory }}<b>{{ score.mandatory_done }} / {{ score.mandatory_total }}</b></div>
+    <div class="card verdict-{{ score.verdict }}">{{ t.verdict }}<b>{{ score.verdict_label }}</b>
+      <span class="muted">{{ t.forecast }}: {{ score.forecast }}%</span></div>
+  </div>
+
+  {% if score.warnings %}
+  <h2>{{ t.warnings }}</h2>
+  <ul>{% for w in score.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <h2>{{ t.summary }}</h2>
+  <div class="summary">{{ run.summary or '' }}</div>
+
+  {% if recommendations %}
+  <h2>{{ t.plan }}</h2>
+  <table>
+    <tr><th>ID</th><th>{{ t.req }}</th><th>{{ t.action }}</th><th>{{ t.impact }}</th></tr>
+    {% for r in recommendations %}
+    <tr><td class="code">{{ r.requirement.code }}</td>
+        <td>{{ r.requirement.parameter }}<br><span class="muted">{{ r.problem }}</span></td>
+        <td>{{ r.action }}</td><td>+{{ r.impact }}%</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2>{{ t.table }}</h2>
+  <table>
+    <tr><th>ID</th><th>{{ t.req }}</th><th>{{ t.bid }}</th><th>{{ t.status }}</th><th>{{ t.reason }}</th></tr>
+    {% for m in matches %}
+    <tr><td class="code">{{ m.requirement.code }}</td>
+        <td>{{ condition(m) }}<br><span class="muted">{{ type_label[m.requirement.req_type] }}</span></td>
+        <td>{{ bid_value(m) }}</td>
+        <td><span class="status" style="background:#{{ colors[m.status] }}">{{ status_label[m.status] }}</span></td>
+        <td>{{ m.reasoning }}{% if m.comment %}<br><i>{{ m.comment }}</i>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
