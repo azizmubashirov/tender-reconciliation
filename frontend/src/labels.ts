@@ -6,7 +6,11 @@ export const STATUS: Record<Status, { label: string; cls: string }> = {
   unconfirmed: { label: "Не подтверждено", cls: "bg-orange-100 text-orange-800 ring-orange-300" },
   mismatch: { label: "Не соответствует", cls: "bg-red-100 text-red-800 ring-red-300" },
   review: { label: "Требует проверки", cls: "bg-stone-200 text-stone-700 ring-stone-300" },
+  na: { label: "Не применяется", cls: "bg-white text-stone-500 ring-stone-300" },
 };
+
+/** Statuses that are not problems: shown under «Все», hidden from «Только проблемы». */
+export const OK_STATUSES: Status[] = ["match", "na"];
 
 export const VERDICT = {
   ready: { label: "Готова к подаче", cls: "border-green-400 bg-green-50 text-green-900" },
@@ -74,6 +78,7 @@ export const DOC_TYPE: Record<string, string> = {
   bank_guarantee: "Банковская гарантия",
   drawing: "Чертёж",
   marketing: "Маркетинговый материал",
+  bid_package: "Пакет документов заявки",
   other: "Прочее",
 };
 export const RUN_STAGE: Record<string, string> = {
@@ -88,6 +93,10 @@ export function condition(r: { parameter: string; operator: string; value: strin
     .filter(Boolean)
     .join(" ")
     .trim();
+}
+
+export function pointsText(p: { min: number; max: number; total: number }) {
+  return `${p.min === p.max ? p.min : `${p.min}–${p.max}`} из ${p.total}`;
 }
 
 export const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${Math.round(v)}%`);

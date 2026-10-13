@@ -31,6 +31,7 @@
       {% if score.total_min != score.total_max %}<span class="muted">{{ score.total_min }}–{{ score.total_max }}%</span>{% endif %}</div>
     <div class="card">{{ t.product }} / {{ t.participant }}<b>{{ score.product if score.product is not none else '—' }}% / {{ score.participant if score.participant is not none else '—' }}%</b></div>
     <div class="card">{{ t.mandatory }}<b>{{ score.mandatory_done }} / {{ score.mandatory_total }}</b></div>
+    {% if points %}<div class="card">{{ t.points }}<b>{{ points }}</b></div>{% endif %}
     <div class="card verdict-{{ score.verdict }}">{{ t.verdict }}<b>{{ score.verdict_label }}</b>
       <span class="muted">{{ t.forecast }}: {{ score.forecast }}%</span></div>
   </div>

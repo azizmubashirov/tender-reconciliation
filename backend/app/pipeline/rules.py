@@ -23,6 +23,7 @@ _units("duration", 12, "год", "года", "лет", "yil", "year", "years", "
 _units("duration", 1, "мес", "месяц", "месяца", "месяцев", "oy", "month", "months")
 _units("duration", 7 / 30, "нед", "недели", "недель", "неделя", "hafta", "week", "weeks")
 _units("duration", 1 / 30, "день", "дня", "дней", "дн", "kun", "day", "days")
+_units("duration", 1 / 720, "час", "часа", "часов", "ч", "soat", "hour", "hours", "hr", "h")
 _units("power", 1000, "квт", "kw")
 _units("power", 1, "вт", "w")
 _units("voltage", 1000, "кв", "kv")
@@ -39,14 +40,31 @@ _units("mass", 1000, "т", "t", "tonna")
 _units("mass", 1, "кг", "kg")
 _units("mass", 0.001, "г", "g", "gr", "gramm")
 _units("temperature", 1, "°c", "°с", "c", "с", "град", "градусов")
-_units("count", 1, "шт", "штук", "dona", "pcs", "pc", "ед", "единиц")
+_units("count", 1, "шт", "штук", "dona", "pcs", "pc", "ед", "единиц", "ta", "xodim", "nafar",
+       "kishi", "чел", "человек", "человека", "сотрудник", "сотрудника", "сотрудников",
+       "специалист", "специалиста", "специалистов", "employee", "employees", "persons")  # fmt: skip
+_units("points", 1, "балл", "балла", "баллов", "ball", "point", "points")
+_units("money", 1, "сум", "сума", "сумов", "сўм", "so'm", "som", "sum", "uzs", "soum")
 _units("percent", 1, "%", "процент", "foiz")
 _units("dpi", 1, "dpi", "точек/дюйм")
 _units("cores", 1, "ядер", "ядра", "core", "cores", "yadro")
 # "г" is ambiguous (год vs грамм); mass wins only when it is the explicit mass alias above.
 _UNIT_TABLE["г"] = ("mass", 0.001)
 
+# Scale words in front of a unit: "500 млн сум", "2 mlrd so'm", "300 ming".
+_MULTIPLIERS = {
+    "тыс": 1e3, "тысяч": 1e3, "тысячи": 1e3, "ming": 1e3, "thousand": 1e3,
+    "млн": 1e6, "миллион": 1e6, "миллиона": 1e6, "миллионов": 1e6, "mln": 1e6, "million": 1e6,
+    "mio": 1e6, "млрд": 1e9, "миллиард": 1e9, "миллиарда": 1e9, "миллиардов": 1e9,
+    "mlrd": 1e9, "billion": 1e9, "bn": 1e9,
+}  # fmt: skip
+_APOSTROPHES = str.maketrans({c: "'" for c in "‘’ʻʼ`´"})
+
 _NUMBER = re.compile(r"(?<![\d.,])[-−+]?\d+(?:[.,]\d+)?")
+# Document numbers and dates are identifiers, not quantities: "№ 462945631", "от 01.05.2026".
+_IDENTIFIERS = re.compile(
+    r"(?:№|\bN[o°º]\.?(?=\s*\d))\s*[\w\-/.]+|\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b"
+)
 _THOUSANDS = re.compile(r"(\d)[\s  ](\d{3})(?!\d)")
 _TOLERANCE = re.compile(r"[±]\s*(\d+(?:[.,]\d+)?)\s*(%?)")
 
@@ -58,7 +76,7 @@ def _to_float(token: str) -> float:
 def parse_numbers(text: str | None) -> list[float]:
     if not text:
         return []
-    cleaned = _TOLERANCE.sub(" ", text)
+    cleaned = _TOLERANCE.sub(" ", _IDENTIFIERS.sub(" ", text))
     while _THOUSANDS.search(cleaned):
         cleaned = _THOUSANDS.sub(r"\1\2", cleaned)
     return [_to_float(t) for t in _NUMBER.findall(cleaned)]
@@ -73,14 +91,23 @@ def parse_tolerance(text: str | None, base: float) -> float:
 
 
 def resolve_unit(unit: str | None, value_text: str | None = None) -> tuple[str, float] | None:
-    """Find the unit either in the explicit unit field or in the value text ("16 ГБ")."""
+    """Find the unit either in the explicit unit field or in the value text ("16 ГБ").
+
+    Scale words multiply the unit ("500 млн сум" is 5e8 сум); a scale word alone means money.
+    """
     for candidate in (unit, value_text):
         if not candidate:
             continue
-        for token in re.findall(r"[^\d\s.,±\-−+()]+", candidate.lower()):
-            token = token.strip(".")
-            if token in _UNIT_TABLE:
-                return _UNIT_TABLE[token]
+        scale = 1.0
+        for token in re.findall(r"[^\d\s.,±\-−+()]+", candidate.lower().translate(_APOSTROPHES)):
+            token = token.strip(".'")
+            if token in _MULTIPLIERS:
+                scale *= _MULTIPLIERS[token]
+            elif token in _UNIT_TABLE:
+                dimension, factor = _UNIT_TABLE[token]
+                return dimension, factor * scale
+        if scale != 1.0:
+            return "money", scale
     return None
 
 
@@ -123,7 +150,11 @@ def evaluate(
             fact_nums = [(f - 32) * 5 / 9 for f in fact_nums]
         scale = req_u[1] if req_u[0] != "temperature" else 1
     elif req_u or fact_u:
-        # Only one side names a unit: assume both use it (typical for "16" vs "16 ГБ").
+        # Only one side names a unit: assume both use it (typical for "16" vs "16 ГБ"). Money
+        # amounts differ by orders of magnitude ("500" mln vs "150 112 592"), so they go to
+        # the model instead of being guessed.
+        if (req_u or fact_u or ("", 1.0))[0] == "money":
+            return RuleResult("unknown", "сумма без единицы измерения")
         scale = 1
     else:
         scale = 1

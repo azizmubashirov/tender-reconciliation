@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.storage import get_bytes, put_bytes
 from app.models import Document, Issue, Package, Project, Requirement
+from app.pipeline.check import rescore
 from app.pipeline.convert import SUPPORTED
 from app.pipeline.extract import renumber
 from app.pipeline.ingest import storage_prefix
@@ -85,8 +86,13 @@ def get_project(project_id: int, db: Db) -> Project:
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
 def update_project(project_id: int, body: ProjectPatch, db: Db) -> Project:
     project = _get(db, Project, project_id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(project, field, value)
+    if changes.keys() & {"min_pass_score", "report_language"}:
+        for run in project.runs:
+            if run.status == "done":
+                rescore(run, project)
     db.commit()
     return project
 

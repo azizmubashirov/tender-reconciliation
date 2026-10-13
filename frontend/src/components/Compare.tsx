@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type Match, type Project, type Recommendation, type Run, type Status } from "../api";
-import { ACTION_TYPE, condition, pct, REQ_TYPE, RUN_STAGE, STATUS, VERDICT } from "../labels";
+import { ACTION_TYPE, condition, OK_STATUSES, pct, pointsText, REQ_TYPE, RUN_STAGE, STATUS, VERDICT } from "../labels";
 import { useSelectedRun } from "../useSelectedRun";
 import { Alert, Button, Card, Kpi, Quote, Spinner, StatusBadge } from "./ui";
 
@@ -52,17 +52,16 @@ export function Compare({ project }: { project: Project }) {
 
   const s = run.score;
   const all = matches.data ?? [];
-  const problems = all.filter((m) => m.status !== "match");
-  const rows = all.filter((m) =>
-    filter === "all" ? true : filter === "problems" ? m.status !== "match" : m.requirement.scope === filter,
-  );
+  const isProblem = (m: Match) => !OK_STATUSES.includes(m.status);
+  const problems = all.filter(isProblem);
+  const rows = all.filter((m) => (filter === "all" ? true : filter === "problems" ? isProblem(m) : m.requirement.scope === filter));
   const selected = all.find((m) => m.id === selectedId) ?? rows[0];
   const verdict = s.verdict ? VERDICT[s.verdict] : null;
 
   return (
     <div className="space-y-4">
       <RunPicker project={project} run={run} onSelect={selectRun} />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-3 sm:grid-cols-2 ${s.points ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         <Kpi
           label="Соответствие"
           value={pct(s.total)}
@@ -71,6 +70,14 @@ export function Compare({ project }: { project: Project }) {
         />
         <Kpi label="Обязательные" value={`${s.mandatory_done} из ${s.mandatory_total}`} />
         <Kpi label="Проблемные пункты" value={s.problems ?? 0} />
+        {s.points && (
+          <Kpi
+            label="Баллы"
+            value={pointsText(s.points)}
+            hint={s.points.pass !== null ? `проходной балл: ${s.points.pass}` : undefined}
+            className={s.points.passed === false ? "border-red-400 bg-red-50 text-red-900" : undefined}
+          />
+        )}
         <Kpi label="Вердикт" value={verdict?.label ?? "—"} hint={`если устранить всё: ${pct(s.forecast)}`} className={verdict?.cls} />
       </div>
 
@@ -121,7 +128,7 @@ export function Compare({ project }: { project: Project }) {
                     {condition(m.requirement)}
                     <div className="text-xs text-stone-500">{REQ_TYPE[m.requirement.req_type]}</div>
                   </td>
-                  <td className="py-2 pr-3 text-stone-700">{m.evidence.map((e) => e.value).filter(Boolean)[0] ?? "не найдено"}</td>
+                  <td className="py-2 pr-3 text-stone-700">{m.status === "na" ? "—" : (m.evidence.map((e) => e.value).filter(Boolean)[0] ?? "не найдено")}</td>
                   <td className="py-2 pr-3">
                     <StatusBadge status={m.status} />
                   </td>
@@ -175,6 +182,11 @@ function MatchPanel({ match, run, recommendation }: { match: Match; run: Run; re
           </span>
         </div>
         <p className="mt-2 text-sm">{match.reasoning}</p>
+        {match.requirement.rated_points !== null && (
+          <p className="mt-1 text-xs text-stone-500">
+            Баллы: {match.points ?? (match.status === "match" ? match.requirement.rated_points : "—")} из {match.requirement.rated_points}
+          </p>
+        )}
         {match.comment && <p className="mt-1 text-sm italic text-stone-600">Комментарий: {match.comment}</p>}
         {recommendation && (
           <div className="mt-3 rounded-lg bg-stone-50 p-3 text-sm">

@@ -322,7 +322,8 @@ class ExtractedFact(BaseModel):
 4. Sitata tekshiruvi, parse, birliklar va parametr kaliti xuddi §3.4 dagidek ishlaydi.
 5. **Manba ustuvorligi** (TZ §5): `source_rank` 3 = ishlab chiqaruvchining rasmiy hujjati, sertifikat, deklaratsiya, litsenziya, ma'lumotnoma; 2 = ishtirokchining texnik taklifi va formalari; 1 = marketing materiallari.
 6. **Ichki qarama-qarshiliklar:** bitta parametr turli hujjatlarda turli qiymatga ega bo'lsa (taklifda 36 oy, pasportda 24 oy), `bid_issues.internal_contradiction` yaratiladi. Samarali qiymat eng yuqori rangli manbadan olinadi. Ranglar teng bo'lsa, ⚪.
-7. Tasdiqlovchi hujjatsiz da'vo: fakt faqat rank 2 manbada bo'lsa va talab `proof_method` bo'yicha rank 3 hujjatni so'rasa, bu «заявлено, не подтверждено» (🟠).
+7. Tasdiqlovchi hujjatsiz da'vo: fakt faqat rank 2 manbada bo'lsa va talab `proof_method` bo'yicha rank 3 hujjatni so'rasa, bu «заявлено, не подтверждено» (🟠). Istisno: ishtirokchi o'zi belgilaydigan shartlar (muddat, to'lov, amal qilish muddati) uchun `proof_method` faqat `tech_proposal`/`commercial_proposal` bo'lsa, ishtirokchining o'z formasi tasdiq hisoblanadi.
+8. **Bitta faylda ko'p hujjat.** Ariza ko'pincha bitta PDF bo'lib keladi (formalar, soliq ma'lumotnomasi, litsenziya, shartnomalar, tavsiya xatlari). `bid.extract` faylni **bo'limlarga** ajratadi: har biri uchun sahifa oralig'i, turi va rekvizitlari (`documents.info.sections`). Faktning turi va `source_rank` butun fayl turidan emas, fakt turgan sahifadagi bo'limdan olinadi (`facts.doc_type`). Bunday fayl `doc_type = bid_package` bo'ladi. 80 sahifadan uzun fayl qismlarga bo'lib yuborilganda bo'lim sahifalari butun fayl bo'yicha qayta hisoblanadi. Ishtirokchi hujjatlari orasidagi qarama-qarshiliklar (`inconsistencies`) ogohlantirishlarga chiqadi.
 
 ---
 
@@ -385,6 +386,8 @@ Sof funksiyalar. Hamma holatlar unit-test va property-based testlar (hypothesis)
 | `date_before` / `date_after` | sana sharti | Ishlab chiqarilgan yil ≥ 2025 | Sana yoki yil taqqoslash. Nisbiy muddatlar topshirish muddatiga nisbatan |
 | `text` | strukturaviy emas | — | Doim `match.judge` ga |
 
+**Birliklar.** Pul: `сум/so'm/sum/UZS` va masshtab so'zlari (`тыс/ming`, `млн/mln`, `млрд/mlrd`): «500 mln so'm» = 5·10⁸. Faqat bir tomonda pul birligi bo'lsa, qoida qaror qilmaydi (judge'ga o'tadi), chunki «500» va «150 112 592» ni taxmin bilan solishtirib bo'lmaydi. Soat (`soat/час`), xodimlar soni (`xodim/чел`), ballar (`ball/балл`). Hujjat raqamlari va sanalar (`№ 462945631`, `01.05.2026`) son sifatida o'qilmaydi.
+
 Ortiqcha taklif (TZ §6): tovar talabdan yuqori bo'lsa (32 ГБ ≥ 16 ГБ), 🟢 bo'ladi va «talabdan yuqori» deb belgilanadi (xulosada kuchli tomon sifatida chiqadi). U boshqa shartga zid bo'lsa (masalan, narx boshlang'ich narxdan yuqori), alohida belgilanadi.
 
 ### 5.5. LLM judge (route `match.judge`)
@@ -409,6 +412,9 @@ class JudgeVerdict(BaseModel):
 - Judge'ga faqat talab, uning sitatasi va **nomzod dalillar** beriladi, butun ariza berilmaydi.
 - `evidence` sitatalari §3.4 dagidek tekshiriladi. Tekshiruvdan o'tmasa, status ⚪ bo'ladi.
 - `needs_expert = true` bo'lsa, status ⚪ bo'ladi (TZ: ekvivalentlik inson qaroriga qoldiriladi).
+- **`na` — taalluqli emas.** Talab bu xaridga tegishli emas yoki ariza hujjatlarida tekshirilmaydi: xizmat xaridida faqat tovarga oid hujjatlar (ishlab chiqaruvchi ishonchnomasi, broshyuralar), 0% ta'minot, elektron tizim maydoniga kiritiladigan narx. Skoringga umuman kirmaydi.
+- Judge'ga talabning manba sitatasi va bo'limlar ro'yxati (fayl, sahifalar, turi, rekvizitlari) beriladi.
+- **`rated` talablar uchun `awarded_points`:** rasmiy shkala bo'yicha olingan ball (masalan, «500 mln dan ortiq — 3, 300–500 — 2, 300 dan kam — 1» shkalasida 150 mln lik eng katta shartnoma 1 ball). Status qoida bilan hal qilingan bo'lsa ham, ball uchun judge'ga yuboriladi.
 
 ### 5.6. Qo'lda o'zgartirish
 
@@ -435,6 +441,7 @@ S = Σ(wᵢ · kᵢ) / Σ wᵢ × 100%        (⚪ «review» statusidagi talabl
 | 🟠 unconfirmed | 0.3 | | desired | 1 |
 | 🔴 mismatch | 0 | | | |
 | ⚪ review | hisobga kirmaydi | | | |
+| ▫️ na | hech qayerda hisobga kirmaydi (majburiylar soniga ham) | | | |
 
 **`rated` vaznlarini normallashtirish.** Ballar (masalan, 30 ball) w = 3 bilan bir shkalada bo'lmagani uchun, `rated` talablarning umumiy vazni `2 · n_rated` ga teng qilib olinadi va ballarga proporsional taqsimlanadi:
 
@@ -456,6 +463,7 @@ Natijada baholanadigan talablar ichidagi nisbat ballarga mos bo'ladi, umumiy shk
 | Muammoli bandlar | 🟡 + 🟠 + 🔴 + ⚪ soni, ranglar bo'yicha alohida |
 | Prognoz | `action_type ≠ unfixable` bo'lgan barcha tavsiyalar bajarildi deb faraz qilinadi (status → 🟢) va S qayta hisoblanadi |
 | Tavsiya ta'siri | `impact = S(shu band 🟢 bo'lganda) − S(hozir)`, foiz punktida |
+| Ballar (`points`) | `rated` talablar bo'yicha oraliq: ball ma'lum bo'lsa (`matches.points`) o'sha, 🟢 → to'liq, 🔴 → 0, qolganlari min da 0 / max da to'liq. O'tish bali (`projects.min_pass_score`, chek-listdagi «minimal o'tish bali» bandidan ham olinadi) bilan solishtiriladi: `passed` = true / false / null. O'tish bali bandining statusini kod shu natijadan qo'yadi. `points_forecast` — tuzatiladigan tavsiyalar bajarilgandan keyingi maksimal ball |
 
 Saqlashda aniqlik float, UI'da butun sonda (78%), XLSX da 1 o'nlik xonagacha.
 
@@ -463,8 +471,8 @@ Saqlashda aniqlik float, UI'da butun sonda (78%), XLSX da 1 o'nlik xonagacha.
 
 | Verdikt | Shart |
 |---|---|
-| 🔴 **Риск отклонения** | Kamida bitta `mandatory` talab statusi 🔴, 🟠 yoki 🟡. Bu foiz qancha bo'lishidan qat'i nazar qo'yiladi (TZ §7) |
-| 🟡 **Требует доработки** | Yuqoridagidek holat yo'q, lekin kamida bitta `mandatory` talab ⚪ |
+| 🔴 **Риск отклонения** | Kamida bitta `mandatory` talab statusi 🔴, 🟠 yoki 🟡, **yoki maksimal ball o'tish balidan past**. Bu foiz qancha bo'lishidan qat'i nazar qo'yiladi (TZ §7) |
+| 🟡 **Требует доработки** | Yuqoridagidek holat yo'q, lekin kamida bitta `mandatory` talab ⚪ yoki o'tish bali ⚪ bandlarga bog'liq |
 | 🟢 **Готова к подаче** | Barcha `mandatory` talablar 🟢 (TZ: «все обязательные зелёные»). `rated` va `desired` talablardagi muammolar verdiktga ta'sir qilmaydi, faqat foizni pasaytiradi |
 
 ### 6.5. Test vektori (unit-test uchun etalon)
@@ -501,6 +509,7 @@ Saqlashda aniqlik float, UI'da butun sonda (78%), XLSX da 1 o'nlik xonagacha.
 
 ### 7.2. Analitik xulosa (route `report.narrative`)
 
+- Xulosa tavsiyalardan **keyin** yoziladi, shuning uchun prognoz va ballar yakuniy bo'ladi (`report.plan` → qayta hisoblash → `report.summary`).
 - Kirishga faqat strukturalangan natija JSON beriladi: verdikt, foizlar, hisoblagichlar, top muammolar, risklar, kuchli tomonlar. Xom hujjatlar berilmaydi.
 - Tarkibi (TZ §8): 1 jumlalik yakun → kritik nomuvofiqliklar → ballni pasaytiruvchilar → risklar (muddati tugayotgan hujjatlar, ichki qarama-qarshiliklar, buyurtmachi hujjatlaridagi noaniqliklar) → kuchli tomonlar → ta'sir bo'yicha saralangan harakatlar rejasi.
 - **Raqamlar faqat placeholder orqali:** LLM `{{S}}`, `{{S_product}}`, `{{mandatory_done}}`, `{{mandatory_total}}`, `{{critical_count}}` kabi belgilardan foydalanadi, ularni kod almashtiradi. Post-tekshiruv: matnda placeholder'dan tashqari foiz yoki son bo'lsa (talab sitatalaridagi qiymatlar bundan mustasno), javob rad etiladi.

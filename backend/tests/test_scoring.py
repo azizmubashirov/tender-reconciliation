@@ -1,4 +1,4 @@
-from app.pipeline.scoring import Item, forecast, impact, score
+from app.pipeline.scoring import Item, forecast, impact, points, score
 
 # Test vector from docs/PIPELINE.md §6.5
 ITEMS = [
@@ -35,3 +35,42 @@ def test_verdicts() -> None:
 
     assert score(ready)["verdict"] == "ready"
     assert score(needs_work)["verdict"] == "needs_work"
+
+
+def test_not_applicable_is_left_out() -> None:
+    items = [
+        Item("T-1", "product", "technical", "mandatory", "match"),
+        Item("U-1", "participant", "documents", "mandatory", "na"),
+        Item("U-2", "participant", "documents", "mandatory", "mismatch"),
+    ]
+    result = score(items)
+    assert result["total"] == 50.0
+    assert result["mandatory_total"] == 2
+    assert result["counts"]["na"] == 1
+    assert result["problems"] == 1
+    # Without the mismatch the bid is ready: "na" never blocks it.
+    assert score(items[:2])["verdict"] == "ready"
+
+
+RATED = [
+    Item("T-1", "product", "technical", "mandatory", "match"),
+    Item("U-1", "participant", "qualification", "rated", "mismatch", rated_points=4),
+    Item("U-2", "participant", "qualification", "rated", "match", rated_points=2),
+    Item("U-3", "participant", "qualification", "rated", "mismatch", rated_points=3, points=1),
+    Item("U-4", "participant", "qualification", "rated", "review", rated_points=1),
+    Item("U-5", "participant", "technical", "rated", "match", rated_points=4, points=4),
+]
+
+
+def test_points_range() -> None:
+    assert points(RATED) == {"min": 7, "max": 8, "total": 14, "pass": None, "passed": None}
+
+
+def test_passing_score_decides_the_verdict() -> None:
+    # 8 points at most: the bid cannot reach 11 even though no mandatory item fails.
+    assert score(RATED, min_pass=11)["verdict"] == "rejection_risk"
+    assert score(RATED, min_pass=11)["points"]["passed"] is False
+    # 7..8 around a passing score of 8: depends on the item under review.
+    assert score(RATED, min_pass=8)["verdict"] == "needs_work"
+    assert score(RATED, min_pass=7)["verdict"] == "ready"
+    assert score(RATED)["verdict"] == "ready"

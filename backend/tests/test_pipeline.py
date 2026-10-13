@@ -6,24 +6,14 @@ Covers the MVP chain: upload -> checklist -> bid facts -> matching -> score -> p
 import io
 import re
 import zipfile
-from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
-import fitz
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app import llm
 from app.core import db as dbmod
-from app.core import storage
-from app.core.config import Settings
-from app.main import app
 from app.schemas.llm import (
     BidDocResult,
     BidFactOut,
@@ -34,9 +24,10 @@ from app.schemas.llm import (
     LotPositionOut,
     RecommendationOut,
     ReportResult,
+    SummaryResult,
     VerdictOut,
 )
-from app.workers import tasks
+from tests.conftest import ClientFactory, make_pdf
 
 TENDER = [
     "Tender No 2026-114. Supply of laptops. Bids are accepted until 15.10.2026.",
@@ -49,14 +40,6 @@ PROPOSAL = [
     "Technical proposal. Laptop Model X1. RAM 16 GB. Warranty 36 months. Anti-glare matte display."
 ]
 PASSPORT = ["Product passport Model X1. Memory: 16 GB. Warranty: 24 months."]
-
-
-def make_pdf(pages: list[str]) -> bytes:
-    doc = fitz.open()
-    for text in pages:
-        doc.new_page().insert_textbox(fitz.Rect(50, 50, 550, 800), text, fontsize=11)
-    data: bytes = doc.tobytes()
-    return data
 
 
 def req(**kw: Any) -> ExtractedRequirement:
@@ -79,7 +62,7 @@ def fake_ask(
     if schema is CustomerDocResult:
         return CustomerDocResult(
             doc_type="technical_specification", title="Supply of laptops", customer_name="Ministry",
-            lot_number="2026-114", submission_deadline="2026-10-15",
+            lot_number="2026-114", submission_deadline="2026-10-15", min_passing_score=None,
             lot_positions=[LotPositionOut(number=1, name="Laptop", quantity="20", unit="pcs")],
             requirements=[
                 req(parameter="RAM", parameter_key="ram", operator="gte", value="16", unit="GB",
@@ -107,9 +90,8 @@ def fake_ask(
         )  # fmt: skip
     if schema is BidDocResult:
         common: dict[str, Any] = {
-            "title": None, "issuer": None, "doc_number": None, "doc_date": None,
-            "valid_until": None, "has_signature": True, "has_seal": True,
-            "participant_name": "Tech LLC", "participant_tin": "301234567",
+            "participant_name": "Tech LLC", "participant_tin": "301234567", "sections": [],
+            "inconsistencies": [],
         }  # fmt: skip
         if "proposal.pdf" in text:
             return BidDocResult(doc_type="tech_proposal", **common, facts=[
@@ -130,12 +112,14 @@ def fake_ask(
         codes = re.findall(r"\[([TU]-\d{3}) \|", text)
         return JudgeResult(verdicts=[
             VerdictOut(requirement_code=c, status=decided[c], reasoning=f"judged {c}",
-                       evidence_quote=None, evidence_document=None)
+                       evidence_quote=None, evidence_document=None, awarded_points=None)
             for c in codes
         ])  # fmt: skip
+    if schema is SummaryResult:
+        return SummaryResult(summary="Риск отклонения: гарантия ниже требуемой.")
     if schema is ReportResult:
         codes = re.findall(r"\[([TU]-\d{3})\]", text)
-        return ReportResult(summary="Риск отклонения: гарантия ниже требуемой.", recommendations=[
+        return ReportResult(recommendations=[
             RecommendationOut(requirement_code=c, problem=f"problem {c}", action=f"fix {c}",
                               action_type="fix_data")
             for c in codes
@@ -144,22 +128,8 @@ def fake_ask(
 
 
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    engine = create_engine(
-        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-    )
-    sessions = sessionmaker(engine, expire_on_commit=False)
-    monkeypatch.setattr(dbmod, "engine", engine)
-    monkeypatch.setattr(dbmod, "SessionLocal", sessions)
-    monkeypatch.setattr(tasks, "SessionLocal", sessions)
-    settings = Settings(local_storage_dir=str(tmp_path), _env_file=None)
-    monkeypatch.setattr(storage, "get_settings", lambda: settings)
-    monkeypatch.setattr(llm, "ask", fake_ask)
-    # Run Celery tasks inline.
-    for task in (tasks.process_package, tasks.extract_requirements, tasks.check_run):
-        monkeypatch.setattr(task, "delay", task)
-    with TestClient(app) as test_client:
-        yield test_client
+def client(client_with: ClientFactory) -> TestClient:
+    return client_with(fake_ask)
 
 
 def test_full_check(client: TestClient) -> None:

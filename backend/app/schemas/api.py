@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 Language = Literal["ru", "uz", "en"]
-Status = Literal["match", "partial", "unconfirmed", "mismatch", "review"]
+Status = Literal["match", "partial", "unconfirmed", "mismatch", "review", "na"]
 
 
 class Orm(BaseModel):
@@ -22,6 +22,7 @@ class ProjectPatch(BaseModel):
     lot_number: str | None = None
     submission_deadline: date | None = None
     report_language: Language | None = None
+    min_pass_score: float | None = None
 
 
 class DocumentOut(Orm):
@@ -75,6 +76,7 @@ class ProjectOut(Orm):
     error: str | None
     checklist_approved: bool
     lot_positions: list[dict[str, Any]]
+    min_pass_score: float | None
     created_at: datetime
     packages: list[PackageOut]
     runs: list[RunBrief]
@@ -156,6 +158,7 @@ class MatchOut(Orm):
     reasoning: str
     evidence: list[dict[str, Any]]
     comment: str | None
+    points: float | None
     requirement: RequirementOut
 
 

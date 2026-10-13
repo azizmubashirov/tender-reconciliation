@@ -1,4 +1,4 @@
-export type Status = "match" | "partial" | "unconfirmed" | "mismatch" | "review";
+export type Status = "match" | "partial" | "unconfirmed" | "mismatch" | "review" | "na";
 
 export interface DocumentInfo {
   id: number;
@@ -34,7 +34,18 @@ export interface Score {
   verdict?: "ready" | "needs_work" | "rejection_risk";
   verdict_label?: string;
   forecast?: number | null;
+  points?: Points | null;
+  points_forecast?: number | null;
   warnings?: string[];
+}
+
+/** Evaluation points: unresolved items give a range; `passed` is null while undecided. */
+export interface Points {
+  min: number;
+  max: number;
+  total: number;
+  pass: number | null;
+  passed: boolean | null;
 }
 
 export interface Run {
@@ -60,6 +71,7 @@ export interface Project {
   error: string | null;
   checklist_approved: boolean;
   lot_positions: { number: number; name: string; quantity: string | null; unit: string | null }[];
+  min_pass_score: number | null;
   created_at: string;
   packages: Package[];
   runs: Run[];
@@ -127,6 +139,7 @@ export interface Match {
   reasoning: string;
   evidence: Evidence[];
   comment: string | null;
+  points: number | null;
   requirement: Requirement;
 }
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Project, type Recommendation, type Run } from "../api";
-import { ACTION_TYPE, CATEGORY, pct, SEVERITY, STATUS, VERDICT } from "../labels";
+import { ACTION_TYPE, CATEGORY, pct, pointsText, SEVERITY, STATUS, VERDICT } from "../labels";
 import { useSelectedRun } from "../useSelectedRun";
 import { RunPicker, RunState } from "./Compare";
 import { Alert, Button, Card, Kpi } from "./ui";
@@ -54,6 +54,17 @@ export function Summary({ project }: { project: Project }) {
         <Kpi label="Обязательные" value={`${s.mandatory_done} из ${s.mandatory_total}`} />
       </div>
 
+      {s.points && s.points.pass !== null && (
+        <Alert kind={s.points.passed === false ? "error" : s.points.passed ? "success" : "info"}>
+          Баллы квалификационной оценки: <b>{pointsText(s.points)}</b>, проходной балл — <b>{s.points.pass}</b>.{" "}
+          {s.points.passed === false
+            ? `Заявка не набирает проходной балл${s.points_forecast != null ? ` (даже после рекомендаций — не более ${s.points_forecast})` : ""}.`
+            : s.points.passed
+              ? "Проходной балл набран."
+              : "Итог зависит от пунктов на проверке."}
+        </Alert>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="По категориям">
           <div className="space-y-2.5">
@@ -72,7 +83,7 @@ export function Summary({ project }: { project: Project }) {
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
             {Object.entries(s.counts ?? {}).map(([k, v]) => (
               <span key={k}>
-                {STATUS[k as keyof typeof STATUS].label}: <b>{v}</b>
+                {STATUS[k as keyof typeof STATUS]?.label ?? k}: <b>{v}</b>
               </span>
             ))}
           </div>

@@ -23,6 +23,8 @@ class Project(Base):
     error: Mapped[str | None] = mapped_column(Text)
     checklist_approved: Mapped[bool] = mapped_column(default=False)
     lot_positions: Mapped[JsonList] = mapped_column(JSON, default=list)
+    # Qualification scoring from the evaluation criteria: the bid is rejected below min_pass_score.
+    min_pass_score: Mapped[float | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     packages: Mapped[list["Package"]] = relationship(
@@ -143,6 +145,8 @@ class Fact(Base):
     page: Mapped[int | None]
     quote: Mapped[str | None] = mapped_column(Text)
     verified: Mapped[bool | None]
+    # Type of the document section the fact comes from: one bid PDF often holds many documents.
+    doc_type: Mapped[str | None]
     source_rank: Mapped[int] = mapped_column(default=2)
 
     document: Mapped[Document] = relationship()
@@ -154,13 +158,15 @@ class Match(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
     requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id", ondelete="CASCADE"))
-    # match | partial | unconfirmed | mismatch | review
+    # match | partial | unconfirmed | mismatch | review | na (does not apply, not scored)
     status: Mapped[str] = mapped_column(String(12))
     ai_status: Mapped[str] = mapped_column(String(12))
     method: Mapped[str] = mapped_column(String(10))  # rule | llm | manual
     reasoning: Mapped[str] = mapped_column(Text, default="")
     evidence: Mapped[JsonList] = mapped_column(JSON, default=list)
     comment: Mapped[str | None] = mapped_column(Text)
+    # Rated requirements: points the bid earns on the official scale; None when not known.
+    points: Mapped[float | None]
 
     requirement: Mapped[Requirement] = relationship()
 

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, type Package, type Project, type Run } from "../api";
+import { api, type DocumentInfo, type Package, type Project, type Run } from "../api";
 import { DOC_TYPE } from "../labels";
 import { Alert, Button, Card, Spinner } from "./ui";
 
@@ -133,6 +133,7 @@ function PackageCard({ project, kind, pkg, title }: { project: Project; kind: "c
               </span>
               <span className="text-xs text-stone-500">
                 {d.status === "ready" && (d.doc_type ? DOC_TYPE[d.doc_type] ?? d.doc_type : `${d.page_count} стр.`)}
+                {d.status === "ready" && sectionCount(d) > 1 && ` · документов в файле: ${sectionCount(d)}`}
                 {d.status === "new" && "ожидает обработки"}
               </span>
               {d.status === "failed" && <span className="text-xs text-red-700" title={d.error ?? ""}>ошибка: {d.error?.slice(0, 60)}</span>}
@@ -180,4 +181,8 @@ function RunButton({ project, pkg }: { project: Project; pkg: Package }) {
       {start.error && <Alert>{start.error.message}</Alert>}
     </div>
   );
+}
+
+function sectionCount(d: DocumentInfo): number {
+  return Array.isArray(d.info.sections) ? d.info.sections.length : 0;
 }

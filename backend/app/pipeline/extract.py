@@ -46,6 +46,11 @@ a bigger offered value still complies. Use eq only for exact values written as e
 screen diagonal, and for names, types and models. lte is for maximums ("не более", \
 "kamida emas"), including delivery terms and weight.
 - "или аналог" / "or equivalent" / "yoki ekvivalent": set equivalent_allowed to true.
+- Evaluation criteria: every scored criterion is a rated requirement with rated_points = its \
+maximum points, and its quote keeps the whole scoring scale ("3 letters - 2 points, 1-3 \
+letters - 1 point, none - 0"). Money thresholds keep the scale word in unit ("mln so'm").
+- The minimum passing score goes to min_passing_score; also add it as a mandatory requirement \
+with operator gte and unit "ball".
 - quote is copied verbatim from the document in its original language.
 - Report contradictions inside the documentation (warranty 24 months in the specification \
 but 12 in the contract), ambiguities and requirements that may restrict competition as issues.
@@ -146,6 +151,8 @@ def run_extraction(db: Session, project: Project) -> None:
             project.submission_deadline = project.submission_deadline or _parse_date(
                 result.submission_deadline
             )
+            if result.min_passing_score is not None:
+                project.min_pass_score = project.min_pass_score or result.min_passing_score
             for pos in result.lot_positions:
                 positions.setdefault(pos.number, pos.model_dump())
             for found in result.issues:

@@ -71,7 +71,9 @@ def override_match(match_id: int, body: MatchPatch, db: Db) -> Match:
     match = _get(db, Match, match_id)
     run = _get(db, Run, match.run_id)
     match.status, match.method, match.comment = body.status, "manual", body.comment
-    rescore(run, _get(db, Project, run.project_id).report_language)
+    # The person decides the status; points then follow it (full for match, none otherwise).
+    match.points = None
+    rescore(run, _get(db, Project, run.project_id))
     db.commit()
     return match
 

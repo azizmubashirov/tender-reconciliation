@@ -2,6 +2,7 @@
 
 import io
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from openpyxl import Workbook
@@ -11,14 +12,14 @@ from app.models import Match, Project, Recommendation, Run
 
 STATUS = {
     "ru": {"match": "Соответствует", "partial": "Частично", "unconfirmed": "Не подтверждено",
-           "mismatch": "Не соответствует", "review": "Требует проверки"},
+           "mismatch": "Не соответствует", "review": "Требует проверки", "na": "Не применяется"},
     "uz": {"match": "Mos", "partial": "Qisman", "unconfirmed": "Tasdiqlanmagan",
-           "mismatch": "Mos emas", "review": "Tekshirish kerak"},
+           "mismatch": "Mos emas", "review": "Tekshirish kerak", "na": "Taalluqli emas"},
     "en": {"match": "Compliant", "partial": "Partial", "unconfirmed": "Not confirmed",
-           "mismatch": "Non-compliant", "review": "Needs review"},
+           "mismatch": "Non-compliant", "review": "Needs review", "na": "Not applicable"},
 }  # fmt: skip
 COLORS = {"match": "16A34A", "partial": "EAB308", "unconfirmed": "F97316",
-          "mismatch": "DC2626", "review": "6B7280"}  # fmt: skip
+          "mismatch": "DC2626", "review": "6B7280", "na": "A8A29E"}  # fmt: skip
 TYPES = {
     "ru": {"mandatory": "Обязательное", "rated": "Оценочное", "desired": "Желательное"},
     "uz": {"mandatory": "Majburiy", "rated": "Baholanadigan", "desired": "Istalgan"},
@@ -31,7 +32,8 @@ TEXT = {
            "plan": "План действий", "table": "Сравнение по требованиям", "req": "Требование",
            "bid": "Заявка", "status": "Статус", "reason": "Обоснование", "action": "Действие",
            "impact": "Влияние", "warnings": "Предупреждения", "deadline": "Подача до",
-           "requirements": "Требования", "facts": "Факты заявки", "source": "Источник", "type": "Тип", "quote": "Цитата"},
+           "requirements": "Требования", "facts": "Факты заявки", "source": "Источник", "type": "Тип", "quote": "Цитата",
+           "points": "Баллы", "pass": "проходной балл", "of": "из"},
     "uz": {"title": "Ariza muvofiqligi hisoboti", "total": "Moslik", "product": "Tovar",
            "participant": "Ishtirokchi", "mandatory": "Bajarilgan majburiylar",
            "verdict": "Verdikt", "forecast": "Tuzatilgandan keyin",
@@ -39,7 +41,8 @@ TEXT = {
            "table": "Talablar bo'yicha solishtirish", "req": "Talab", "bid": "Ariza",
            "status": "Status", "reason": "Asos", "action": "Harakat", "impact": "Ta'siri",
            "warnings": "Ogohlantirishlar", "deadline": "Topshirish muddati",
-           "requirements": "Talablar", "facts": "Ariza faktlari", "source": "Manba", "type": "Turi", "quote": "Iqtibos"},
+           "requirements": "Talablar", "facts": "Ariza faktlari", "source": "Manba", "type": "Turi", "quote": "Iqtibos",
+           "points": "Ballar", "pass": "o'tish bali", "of": "dan"},
     "en": {"title": "Bid compliance report", "total": "Compliance", "product": "Product",
            "participant": "Participant", "mandatory": "Mandatory met", "verdict": "Verdict",
            "forecast": "After fixes", "summary": "Analytical conclusion",
@@ -47,7 +50,8 @@ TEXT = {
            "req": "Requirement", "bid": "Bid", "status": "Status", "reason": "Reasoning",
            "action": "Action", "impact": "Impact", "warnings": "Warnings",
            "deadline": "Submission deadline", "requirements": "Requirements",
-           "facts": "Bid facts", "source": "Source", "type": "Type", "quote": "Quote"},
+           "facts": "Bid facts", "source": "Source", "type": "Type", "quote": "Quote",
+           "points": "Points", "pass": "passing score", "of": "of"},
 }  # fmt: skip
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -76,6 +80,17 @@ def condition(match: Match) -> str:
     return " ".join(p for p in parts if p).strip()
 
 
+def points_text(score: dict[str, Any], t: dict[str, str]) -> str:
+    earned = score.get("points")
+    if not earned:
+        return ""
+    low, high = f"{earned['min']:g}", f"{earned['max']:g}"
+    text = f"{low if low == high else f'{low}–{high}'} {t['of']} {earned['total']:g}"
+    if earned.get("pass") is not None:
+        text += f" ({t['pass']} {earned['pass']:g})"
+    return text
+
+
 def bid_value(match: Match) -> str:
     return "; ".join(e["value"] for e in match.evidence if e.get("value")) or "—"
 
@@ -96,6 +111,7 @@ def build_pdf(project: Project, run: Run) -> bytes:
         colors=COLORS,
         condition=condition,
         bid_value=bid_value,
+        points=points_text(run.score, TEXT[lang]),
     )
     return HTML(string=html).write_pdf()  # type: ignore[no-any-return]
 
@@ -119,6 +135,7 @@ def build_xlsx(project: Project, run: Run) -> bytes:
         (t["participant"], score.get("participant")),
         (t["mandatory"], f"{score.get('mandatory_done')} / {score.get('mandatory_total')}"),
         (t["forecast"], score.get("forecast")),
+        (t["points"], points_text(score, t)),
         (t["warnings"], "; ".join(score.get("warnings", []))),
         (t["summary"], run.summary or ""),
     ]  # fmt: skip
@@ -128,7 +145,7 @@ def build_xlsx(project: Project, run: Run) -> bytes:
         cell.font = bold
     summary.column_dimensions["A"].width = 28
     summary.column_dimensions["B"].width = 100
-    summary["B10"].alignment = Alignment(wrap_text=True, vertical="top")
+    summary["B11"].alignment = Alignment(wrap_text=True, vertical="top")
 
     compare = book.create_sheet(t["table"][:31])
     compare.append(["ID", t["req"], "", t["bid"], t["status"], t["reason"], t["source"]])
